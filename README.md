@@ -29,7 +29,15 @@ The optional Windows distribution is an unsigned, windowed **folder build**. Aft
 .\.venv\Scripts\python.exe packaging\smoke_exe.py
 ```
 
-With that interpreter activated, the build command is `python packaging/build_exe.py`. Run `dist\PhotoExplorer\PhotoExplorer.exe`, or extract the versioned `dist\PhotoExplorer-<version>-win64.zip` and run the exe inside its folder. Keep `_internal` beside the exe; copying the exe alone will not work. Right-click the exe or its shortcut to pin it to Start or the taskbar.
+With that interpreter activated, the build command is `python packaging/build_exe.py`. Run `dist\PhotoExplorer\PhotoExplorer.exe`, or extract the versioned `dist\PhotoExplorer-<version>-win64.zip` and run the exe inside its folder. Keep `_internal` beside the exe; copying the exe alone will not work.
+
+To put it in the Start menu, install it for the current user (no administrator rights needed):
+
+```powershell
+.\.venv\Scripts\python.exe packaging\install.py
+```
+
+This copies the build to `%LOCALAPPDATA%\Programs\PhotoExplorer` and creates **Photo Explorer** under Start → All apps; right-click that entry to pin it to Start or the taskbar. Run it again after every rebuild, since `dist` is replaced by the build script. `packaging\install.py --status` shows the installed paths and `--uninstall` removes the program and the shortcut while leaving your library data in place.
 
 The build is **unsigned**. Windows SmartScreen can show **unknown publisher**, and antivirus products may inspect or block a locally built executable. Only choose **More info → Run anyway** for a build you trust. No installer or signing tool is needed for the folder distribution.
 
