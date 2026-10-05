@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Photo Explorer</title><link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/viewer.css">
+</head>
+<body>
+  <header id="topbar">
+    <a class="brand" href="#" aria-label="Photo Explorer home"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="4"/><circle cx="8" cy="9" r="2"/><path d="m3 18 6-6 4 4 3-3 5 6"/></svg><span>Photo Explorer</span></a>
+    <button id="open-folder" class="primary">Open folder</button>
+    <button id="browse-folder" title="Browse folders without the native picker">Browse…</button>
+    <select id="roots" aria-label="Recent folders"><option value="">Recent folders</option></select>
+    <div class="ordering"><label>Sort <select id="sort" aria-label="Sort criterion"></select></label><button id="direction" aria-label="Sort direction">↓ desc</button><button id="shuffle" hidden>Shuffle</button></div>
+    <input id="search" type="search" placeholder="Search this folder…" aria-label="Search filenames or paths">
+    <label class="size-control" title="Thumbnail size">Size <input id="thumb-size" type="range" min="120" max="360" step="10" value="200"></label>
+    <button id="rescan">Rescan</button><button id="help" title="Keyboard shortcuts (?)">?</button>
+  </header>
+  <nav id="locationbar"><button id="sidebar-toggle" title="Toggle sidebar (B)">☰</button><span id="breadcrumb">Your images, in your order.</span><span class="spacer"></span><span id="scan-progress" role="status"></span></nav>
+  <main id="workspace">
+    <aside id="sidebar" hidden><h2>Library</h2><div id="folder-tree"></div><div id="filter-panel"></div><div id="stats-panel"></div></aside>
+    <section id="grid" tabindex="0" role="grid" aria-label="Image library" aria-multiselectable="true">
+      <div id="grid-space"></div>
+      <div id="empty-state"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="3"/><circle cx="8" cy="9" r="2"/><path d="m3 18 6-6 4 4 3-3 5 6"/></svg><h1>A place for every photo.</h1><p>Open a folder, choose an order, and explore.</p><button id="empty-open" class="primary">Open a folder</button><p class="muted">Local files. Private by design. No uploads.</p></div>
+    </section>
+  </main>
+  <div id="selection-toolbar" hidden><strong id="selection-count"></strong><button data-batch="move">Move</button><button data-batch="copy">Copy</button><button data-batch="trash">Recycle Bin</button><button data-batch="rate">Rate</button><button data-batch="favorite">Favourite</button><button id="clear-selection">Clear</button></div>
+  <footer id="statusbar"><span id="status">Open a folder to get started</span><span id="selection-status"></span></footer>
+  <section id="viewer" hidden tabindex="-1" role="dialog" aria-modal="true" aria-label="Photo viewer">
+    <div id="image-stage"><img id="view-image" alt="" draggable="false"><button class="edge previous" aria-label="Previous image">‹</button><button class="edge next" aria-label="Next image">›</button></div>
+    <header id="view-top" class="overlay"><button id="view-close" title="Back to grid (Esc)">✕</button><strong id="view-counter"></strong><div class="view-title"><span id="view-name"></span><small id="view-value"></small></div><div class="ordering"><select id="view-sort" aria-label="Viewer sort criterion"></select><button id="view-direction">↓ desc</button><button id="view-shuffle" hidden>Shuffle</button></div><button data-view="fit">Fit</button><button data-view="actual">1:1</button><button data-view="zoom-out" aria-label="Zoom out">−</button><span id="view-zoom">100%</span><button data-view="zoom-in" aria-label="Zoom in">+</button><button id="view-info">Info</button><button id="view-menu">Actions</button></header>
+    <aside id="info-panel" class="overlay" hidden></aside><div id="filmstrip" class="overlay" hidden></div><div id="slideshow-progress"></div>
+  </section>
+  <dialog id="modal"><form method="dialog"><header><h2 id="modal-title"></h2><button value="cancel" aria-label="Close dialog">✕</button></header><div id="modal-body"></div><footer id="modal-footer"></footer></form></dialog>
+  <div id="context-menu" role="menu" hidden></div><div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>
