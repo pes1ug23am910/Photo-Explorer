@@ -6,8 +6,10 @@ import {navigate, closeViewer, applyMode, zoomBy, panBy, loadOriginal, renderInf
 import {action, annotate, dialog, textDialog} from './panels.js';
 import {slideshow, toggleSlideshow, stopSlideshow, copyImage, copyPath} from './playback.js';
 import {comparing, openCompare, closeCompare, compareZoom, resetCompare} from './compare.js';
+import {undoLast} from './operations_ui.js';
 
 export const shortcuts = [
+  ['Ctrl+Z', 'Undo the latest completed file operation after confirmation', 'Grid / viewer'],
   ['Enter / double-click', 'Open the focused image', 'Grid'],
   ['Arrows / Home / End / Page Up / Page Down', 'Move grid selection', 'Grid'],
   ['Ctrl+click / Shift+click / Ctrl+A', 'Toggle, range, or select all', 'Grid'],
@@ -83,6 +85,7 @@ export function initKeys() {
       else { state.selected.clear(); dispatch('selection-changed'); }
     };
     else if (key === '?') handler = showHelp;
+    else if (control && key === 'z') handler = undoLast;
     else if (control && key === 'a' && !viewing) handler = selectAll;
     else if (control && key === 'e') handler = () => action('reveal');
     else if (control && key === 'o') handler = () => action('open');

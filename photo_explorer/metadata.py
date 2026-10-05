@@ -9,6 +9,7 @@ from typing import Any
 
 from PIL import ExifTags, Image
 from pillow_heif import register_heif_opener
+from .config import access_path
 
 register_heif_opener()
 
@@ -89,7 +90,7 @@ def read_metadata(path: str | Path) -> dict:
         return {"width": None, "height": None, "pixels": None, "aspect": None, "orient": None,
                 "taken": None, "format": "SVG", "animated": 0, "frames": 1,
                 "exif_orientation": 1, "exif": {}, "meta_state": 1, "meta_error": None}
-    with Image.open(path) as image:
+    with Image.open(access_path(path)) as image:
         tags, extra = exif_data(image)
         orientation = int(tags.get(274, 1))
         width, height = image.size

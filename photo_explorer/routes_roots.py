@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, StrictInt
 
 from .config import canonical, inside, validate_directory
 from .db import build_query
+from .explorer import folder_tree
 
 router = APIRouter(prefix="/api/roots")
 
@@ -62,6 +62,7 @@ def open_root(body: OpenRoot, request: Request) -> dict:
             root_id = db.execute("INSERT INTO roots(path,recursive,created,opened) VALUES (?,?,?,?)",
                                  (identity, int(body.recursive), now, now))
         job = request.app.state.scanner.start(root_id)
+    request.app.state.watcher.configure()
     return {"root": require_root(request, root_id), "job": job}
 
 
@@ -75,14 +76,18 @@ def rescan(root_id: int, request: Request) -> dict:
 @router.get("/{root_id}/scan")
 def scan_status(root_id: int, request: Request) -> dict:
     """Read the latest scan's phase and counters."""
-    require_root(request, root_id)
-    return request.app.state.scanner.status(root_id)
+    root = require_root(request, root_id)
+    job = request.app.state.scanner.status(root_id)
+    return {"prewarm_done": 0, "prewarm_total": 0, "dup_done": 0, "dup_total": 0, "dup_running": False,
+            **job, "revision": root["revision"],
+            "watch_error": request.app.state.watcher.error}
 
 
 @router.delete("/{root_id}")
 def forget_root(root_id: int, request: Request) -> dict:
     """Forget only index rows and thumbnails; leave source files untouched."""
     require_root(request, root_id)
+    request.app.state.watcher.forget(root_id)
     with request.app.state.scanner.root_lock(root_id):
         rows = request.app.state.db.all("SELECT * FROM images WHERE root_id=?", (root_id,))
         request.app.state.cache.forget(rows, root_id)
@@ -126,26 +131,7 @@ def stats(root_id: int, request: Request) -> dict:
 @router.get("/{root_id}/dirs")
 def directories(root_id: int, request: Request) -> list[dict]:
     """Build a folder tree with inclusive descendant image counts."""
-    root = require_root(request, root_id)
-    root_path = root["path"]
-    nodes: dict[str, dict] = {}
-
-    def node(path: str) -> dict:
-        if path not in nodes:
-            nodes[path] = {"path": path, "name": Path(path).name or path, "count": 0, "children": []}
-            if path != root_path:
-                node(str(Path(path).parent))["children"].append(nodes[path])
-        return nodes[path]
-
-    node(root_path)
-    for row in request.app.state.db.all("SELECT dir,COUNT(*) count FROM images WHERE root_id=? GROUP BY dir ORDER BY dir", (root_id,)):
-        current = row["dir"]
-        while inside(current, root_path):
-            node(current)["count"] += row["count"]
-            if current == root_path:
-                break
-            current = str(Path(current).parent)
-    return [nodes[root_path]]
+    return folder_tree(request.app.state.db, require_root(request, root_id))
 
 
 @router.get("/{root_id}/groups")

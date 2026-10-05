@@ -12,10 +12,15 @@ export function el(tag, attributes = {}, text = '') {
   return node;
 }
 
-export function toast(message, success = false) {
+export function toast(message, success = false, operationId = null) {
   const node = el('div', {class: `toast${success ? ' success' : ''}`, role: 'status'}, message);
   $('#toasts').append(node);
-  setTimeout(() => node.remove(), 6500);
+  if (operationId) {
+    const undo = el('button', {type: 'button'}, 'Undo');
+    undo.onclick = () => dispatch('undo-operation', operationId);
+    node.append(undo);
+  }
+  setTimeout(() => node.remove(), operationId ? 10000 : 6500);
 }
 
 export async function api(path, options = {}) {

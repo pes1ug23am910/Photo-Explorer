@@ -89,6 +89,7 @@ export async function closeViewer(updateHash = true) {
   backgroundInert(false);
   clearTimeout(hideTimer);
   dispatch('viewer-closed');
+  dispatch('viewer-neighbourhood', []);
   if (updateHash) writeHash();
   await refreshGrid();
   await scrollToIndex(state.index, true);
@@ -117,6 +118,7 @@ export async function navigate(requested, relative = false) {
   const item = result.items[index - offset];
   if (!item) { await navigate(Math.min(index, state.total - 1)); return; }
   state.current = item;
+  dispatch('viewer-neighbourhood', result.items.map(row => row.id));
   state.index = index;
   original = false;
   image.classList.add('loading');

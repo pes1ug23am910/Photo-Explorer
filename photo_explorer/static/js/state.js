@@ -7,10 +7,11 @@ export const sorts = {
   aspect: 'Aspect ratio', ext: 'Type', camera: 'Camera', rating: 'Rating', random: 'Random',
 };
 export const filterKeys = ['ext', 'q', 'date_field', 'date_from', 'date_to', 'size_min', 'size_max',
-  'orient', 'min_rating', 'favorites', 'camera', 'dir', 'animated', 'has_gps', 'min_pixels', 'meta_failed'];
+  'orient', 'min_rating', 'favorites', 'camera', 'dir', 'dir_mode', 'animated', 'has_gps', 'min_pixels', 'meta_failed'];
 const defaults = {thumbSize: 200, sidebar: false, info: false, wrap: false, upscale: false,
   skipConfirm: false, wheelMode: 'navigate', theme: 'dark', groupDates: false, filmstrip: true,
-  lockZoom: false, lockRotation: false, slideInterval: 4, slideshowLoop: false, fade: true};
+  lockZoom: false, lockRotation: false, slideInterval: 4, slideshowLoop: false, fade: true, dirMode: 'subtree',
+  cacheMaxMB: 2048, prewarm: true, watchFolders: true};
 let localPrefs = {};
 try { localPrefs = JSON.parse(localStorage.getItem('photo-explorer') || '{}'); } catch { /* Storage may be disabled. */ }
 export const state = {root: null, rootRecord: null, sort: 'mtime', order: 'desc', filters: {}, total: 0,

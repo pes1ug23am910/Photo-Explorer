@@ -6,11 +6,12 @@ import hashlib
 import os
 import threading
 import textwrap
+import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from .config import canonical
+from .config import access_path, canonical
 from .db import Database
 
 
@@ -21,10 +22,11 @@ class ThumbnailCache:
         self.directory = home / "thumbs"
         self.locks = [threading.RLock() for _ in range(128)]
         self.db = db
+        self.policy = None
 
     def key(self, row: dict) -> str:
         """Hash current file identity; even an unscanned mtime change invalidates it."""
-        stat = Path(row["display_path"]).stat()
+        stat = access_path(row["display_path"]).stat()
         identity = f"{canonical(row['path'])}|{stat.st_size}|{stat.st_mtime_ns}"
         return hashlib.sha1(identity.encode("utf-8")).hexdigest()
 
@@ -41,24 +43,26 @@ class ThumbnailCache:
         destination = self.directory / key[:2] / f"{key}_{suffix}"
         with self.locks[int(key[:4], 16) % len(self.locks)]:
             if destination.exists():
+                if self.policy:
+                    self.policy.touch(row["root_id"], key, suffix)
                 return destination, key
-            # Record the key only when a derivative is actually written, so cache hits stay read-only.
-            if self.db:
-                self.db.execute("INSERT OR IGNORE INTO cache_keys(root_id,key) SELECT id,? FROM roots WHERE id=?",
-                                (key, row["root_id"]))
             destination.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination.with_suffix(destination.suffix + ".tmp")
             try:
                 if row.get("meta_state") == 2:
                     self._placeholder(temporary, mode, row.get("meta_error"))
                 else:
-                    self._generate(Path(row["display_path"]), temporary, mode)
+                    self._generate(access_path(row["display_path"]), temporary, mode)
                 os.replace(temporary, destination)
             except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
                 self._placeholder(temporary, mode, str(exc))
                 os.replace(temporary, destination)
             finally:
                 temporary.unlink(missing_ok=True)
+            if self.db:
+                self.db.execute("INSERT OR REPLACE INTO cache_keys(root_id,key,kind,bytes,last_used) "
+                                "SELECT id,?,?,?,? FROM roots WHERE id=?",
+                                (key, suffix, destination.stat().st_size, time.time(), row["root_id"]))
         return destination, key
 
     def _generate(self, source: Path, destination: Path, mode: int | str) -> None:

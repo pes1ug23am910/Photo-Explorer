@@ -135,12 +135,19 @@ def build_query(root_id: int, params: Mapping[str, Any]) -> tuple[str, list, str
     if params.get("camera"):
         clauses.append("CASEFOLD(camera) LIKE ? ESCAPE '\\'")
         values.append(f"%{_like(str(params['camera']).casefold())}%")
+    dir_mode = params.get("dir_mode", "subtree")
+    if dir_mode not in {"subtree", "exact"}:
+        raise ValueError("dir_mode must be subtree or exact")
     if params.get("dir"):
         import os
         from .config import canonical
-        directory = canonical(params["dir"]).rstrip("/\\")
-        clauses.append("(dir = ? COLLATE NOCASE OR dir LIKE ? ESCAPE '\\' COLLATE NOCASE)")
-        values.extend([directory, _like(directory + os.sep) + "%"])
+        directory = canonical(params["dir"])
+        if dir_mode == "exact":
+            clauses.append("dir = ? COLLATE NOCASE")
+            values.append(directory)
+        else:
+            clauses.append("(dir = ? COLLATE NOCASE OR dir LIKE ? ESCAPE '\\' COLLATE NOCASE)")
+            values.extend([directory, _like(directory.rstrip("/\\") + os.sep) + "%"])
     return " AND ".join(clauses), values, ordering
 
 
@@ -152,6 +159,8 @@ class Database:
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.executescript(SCHEMA)
+            from .migrations import migrate
+            migrate(connection)
             for column in ("mtime", "ctime", "name_key", "size", "sort_date", "pixels", "ext", "rnd", "dir", "meta_state"):
                 connection.execute(f"CREATE INDEX IF NOT EXISTS idx_{column} ON images(root_id,{column})")
 

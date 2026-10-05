@@ -29,7 +29,10 @@ def test_picker_child_process(client, library, monkeypatch):
 
 def test_settings_health_and_local_protection(client, isolated_home):
     health = client.get("/api/health").json()
-    assert health == {"ok": True, "version": "0.1.0", "home": str(isolated_home.resolve())}
+    assert health.pop("last_backup").endswith('.db')
+    assert health == {"ok": True, "version": "0.1.0", "home": str(isolated_home.resolve())} or health == {
+        "ok": True, "version": "0.2.0", "home": str(isolated_home.resolve())}
+    assert health["version"] == "0.2.0"
     prefs = {"theme": "light", "thumbSize": 250}
     assert client.put("/api/settings", json=prefs).json() == prefs
     assert client.get("/api/settings").json() == prefs

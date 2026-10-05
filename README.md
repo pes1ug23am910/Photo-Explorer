@@ -77,7 +77,7 @@ Default storage is `%LOCALAPPDATA%\PhotoExplorer`: `index.db` and a `thumbs/` ca
 
 Cache identities hash the normalized absolute path, byte size, and nanosecond modification time. JPEG thumbs preserve display aspect and apply EXIF orientation. Previews are bounded by 2048 pixels. HEIC/HEIF, TIFF and PSD get full-size PNG renders; animated GIF/WebP use their original bytes. SVG stays browser-rendered with a restrictive response policy. Corrupt files remain listed with placeholders. Recycle Bin, move, copy and rename act only on indexed ids; overwrite is refused. Recycle Bin is the recovery route for deleted images.
 
-The global unique path index permits one owning root per file. Overlapping roots are rejected with an explanation; use the existing folder tree or forget the old root through `DELETE /api/roots/{id}` before reopening its parent. Symlinks and hidden/system folders are skipped. Access failures stop a scan without pruning unvisited files. Re-scan after external edits; there is no filesystem watcher. Very large images are subject to Pillow's decompression-bomb protection. Rotation of EXIF-only dimensions is supported without a full decode.
+The global unique path index permits one owning root per file. Overlapping roots are rejected with an explanation; use the existing folder tree or forget the old root through `DELETE /api/roots/{id}` before reopening its parent. Symlinks and hidden/system folders are skipped. Unreadable subfolders are skipped without pruning their indexed files. Live watching updates external changes; Rescan remains available. Very large images are subject to Pillow's decompression-bomb protection. Rotation of EXIF-only dimensions is supported without a full decode.
 
 ## Samples and verification
 
@@ -92,4 +92,38 @@ $env:PHOTO_EXPLORER_HOME = "$PWD\.work\home"
 
 Tests create private libraries and home directories under `.work/pytest`, replace Recycle Bin and native system calls, and exercise every sort direction and filter plus the ordered-navigation acceptance test. The optional Node runtime runs a navigation-module contract test without a browser or npm. A deprecation warning from the installed Starlette/httpx test integration may appear; the installed client remains usable.
 
-No videos, RAW decoding, editing controls, maps, cloud services, archives or duplicate detection are included.
+No videos, RAW decoding, editing controls, maps, cloud services or archives are included.
+
+## Folder tools and recoverable operations
+
+**Tools** opens Operations, Flatten, Rules, and Export structure. The folder context menu also opens these tools for that folder. The header mode switches between **This folder only** and **Include subfolders**; the API uses `dir_mode=exact` or `subtree` (the unchanged default). Counts distinguish direct images, other files and child folders; recursive image counts remain available in the folder tooltip.
+
+Every move, copy, rename, Recycle Bin action and batch has an operation id and a manifest under `home/operations/`. **Ctrl+Z**, a toast's ten-second **Undo** button, or the Operations panel reverses a completed operation after naming it in a confirmation. Undo never overwrites another file. Conflicts are recorded per entry and other entries continue. Repeated undo returns the same result. Copies are undone through the Recycle Bin. Trashed files must be restored from the Recycle Bin; on-disk rotation remains irreversible and is recorded as such.
+
+Flatten previews file moves or copies from nested folders. It supports folder-chain prefixes, nested bracket-tag stripping, prefix caps, extension/exclude filters, case-insensitive numbered collisions, and byte-identical skipping. Run always replans; a changed file count requires another preview. Move undo recreates removed empty folders. A destination inside the target subtree is refused unless it is the target itself.
+
+Rules support all/any conditions over names (including stem suffix `-t`), formats, sizes, dimensions, dates, orientation, ratings, favourites, camera, metadata failures and relative directories. Five editable, deletable starter presets are installed once. Preview shows matching files and resolved destination names. Rules can include other files or be limited to selected images. Destinations containing an already matched file are refused to prevent repeated processing.
+
+Structure export produces a plain text tree, files before directories, with skip-by-name/path options. Preview shows 400 lines; Copy and Save include everything. Save uses `Directory Structure/<folder> Structure.txt` beneath the selected source or destination folder.
+
+New APIs: `/api/operations`, `/api/operations/{id}/undo`, `/api/operations/{id}/cancel`, `/api/operations/batch`, `/api/flatten/plan`, `/api/flatten/run`, `/api/rules/preview`, `/api/rules/run`, `/api/rules`, `/api/fs/structure`, and `/api/fs/structure/save`. Operations over 200 entries return an id immediately; poll the journal for progress. Completed runs with per-entry failures can undo their successful entries. Interrupted or cancelled runs remain inspectable and require manual recovery using their entries/manifests.
+
+## Cache, backups, and folder watching
+
+Settings adds **Cache** and **Library** sections. The default cap is 2048 MB, adjustable from 256 MB to 16 GB. Old unused derivatives are evicted after scans, after warming batches, and hourly. Files used in the last ten minutes and the viewer's current neighbourhood are protected, so interactive use can temporarily exceed the cap. Cache hits collect touches in memory and flush them every minute and at shutdown. **Clear cache** is safe while the app is running; files regenerate as needed.
+
+Idle pre-warming generates 256-pixel thumbnails in batches of 32, pauses during interactive traffic, and stops before the cap. A conservative reservation can leave some unused space at the cap. `/api/cache` returns usage, cap and last eviction. `/api/cache/clear` optionally accepts `root_id`.
+
+SQLite's online backup API saves one consistent `home/backups/index-YYYYMMDD.db` per day, retaining seven. `/api/health` includes `last_backup`. Stop the app before restoring a backup over `index.db`.
+
+The watcher coalesces changes for 1.5 seconds, updates up to 200 affected files directly, and uses an incremental rescan for larger changes or directory events. Native watching falls back to polling if startup fails. Problems appear beside scan progress; manual Rescan stays available. Root revisions refresh the grid while preserving scroll and locating the current viewer image again. The browse dialog lazily expands folders with direct image counts.
+
+## Exact duplicates
+
+**Tools → Duplicates** hashes only files sharing a size, reuses SHA-256 results while size and modified time match, and displays exact-copy groups. Choose a keeper, preview the affected count, then move the others to an existing folder or explicitly confirm sending them to the Recycle Bin. Bulk resolution applies to every group in the current scan, including unloaded pages. Resolution rechecks file bytes and refuses stale groups. Moves use the operations journal and can be undone; trash recovery uses the Recycle Bin. Scan progress is in `dup_done` / `dup_total` / `dup_running` on the library scan endpoint.
+
+Near-duplicate detection is not included; this feature finds files with identical content, not visually similar images.
+
+## Upgrade compatibility
+
+Opening a 0.1.0 index adds journal, rule, folder-count, hash and duplicate tables plus a guarded `roots.revision` column and `settings.schema_version=2`. Cache rows migrate to a derivative-specific key while the original rows remain in `cache_keys_legacy`. Images and annotations are not rebuilt by migration. Saved operation snapshots reserve deleted image ids until undo can restore them. Libraries can still use every original endpoint and filter; single-file action responses add `operation_id`.

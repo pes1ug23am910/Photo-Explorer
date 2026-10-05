@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import threading
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from . import fileops
-from .config import BROWSER_FORMATS, MIME_TYPES
+from .config import BROWSER_FORMATS, MIME_TYPES, access_path
 from .metadata import read_metadata
+from .routes_ops import single_action
 
 router = APIRouter(prefix="/api")
 
@@ -47,7 +47,7 @@ def require_image(request: Request, image_id: int) -> dict:
 
 def media_response(request: Request, row: dict, mode: int | str) -> Response:
     """Serve an immutable derivative or a browser-safe original."""
-    source = Path(row["display_path"])
+    source = access_path(row["display_path"])
     if not source.is_file():
         request.app.state.db.execute("DELETE FROM images WHERE id=?", (row["id"],))
         raise HTTPException(404, "The image file no longer exists. Rescan the folder.")
@@ -126,29 +126,25 @@ def action_lock(request: Request, image_id: int) -> threading.RLock:
 @router.post("/images/{image_id}/trash")
 def trash(image_id: int, request: Request) -> dict:
     """Move an image to the Recycle Bin."""
-    with action_lock(request, image_id):
-        return fileops.trash(request.app.state.db, require_image(request, image_id))
+    return single_action(request, require_image(request, image_id), "trash")
 
 
 @router.post("/images/{image_id}/move")
 def move(image_id: int, body: DestinationBody, request: Request) -> dict:
     """Move an indexed image to an existing directory without overwriting."""
-    with action_lock(request, image_id):
-        return fileops.transfer(request.app.state.db, require_image(request, image_id), body.dest, True)
+    return single_action(request, require_image(request, image_id), "move", dest=body.dest)
 
 
 @router.post("/images/{image_id}/copy")
 def copy(image_id: int, body: DestinationBody, request: Request) -> dict:
     """Copy an indexed image and index the copy when its root is open."""
-    with action_lock(request, image_id):
-        return fileops.transfer(request.app.state.db, require_image(request, image_id), body.dest, False)
+    return single_action(request, require_image(request, image_id), "copy", dest=body.dest)
 
 
 @router.post("/images/{image_id}/rename")
 def rename(image_id: int, body: RenameBody, request: Request) -> dict:
     """Rename without overwriting another file."""
-    with action_lock(request, image_id):
-        return fileops.rename(request.app.state.db, require_image(request, image_id), body.name)
+    return single_action(request, require_image(request, image_id), "rename", name=body.name)
 
 
 @router.post("/images/{image_id}/reveal")
@@ -174,8 +170,17 @@ def destinations(request: Request) -> list[dict]:
 @router.post("/images/{image_id}/rotate")
 def rotate(image_id: int, body: RotateBody, request: Request) -> dict:
     """Rotate an indexed still image on disk after the client confirms."""
-    with action_lock(request, image_id):
-        return fileops.rotate(request.app.state.db, require_image(request, image_id), body.degrees)
+    row = require_image(request, image_id)
+    result = {}
+    def execute(entry: dict) -> dict:
+        result.update(fileops.rotate(request.app.state.db, row, body.degrees))
+        return {"action": "rotated"}
+    op = request.app.state.operations.run("rotate", f"Rotate {row['name']}", row["root_id"],
+                                          {"degrees": body.degrees}, [{"src": row["display_path"], "action": "rotated"}],
+                                          execute, undoable=False)
+    if op["failed"]:
+        raise ValueError(op["entries"][0]["error"])
+    return {**result, "operation_id": op["operation_id"]}
 
 
 @router.post("/images/{image_id}/wallpaper")

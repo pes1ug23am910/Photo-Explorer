@@ -80,9 +80,11 @@ async function refreshTree() {
   const target = $('#folder-tree');
   target.replaceChildren();
   function branch(node, depth) {
-    const button = el('button', {class: 'tree-folder', title: node.path, 'aria-pressed': state.filters.dir === node.path}, `${node.name}  ${node.count.toLocaleString()}`);
+    const button = el('button', {class: 'tree-folder', title: `${node.path} · ${node.count} images including subfolders`, 'aria-pressed': state.filters.dir === node.path}, node.name);
+    button.append(el('small', {}, `${node.images_direct} images · ${node.files_direct} files · ${node.subfolders} folders`));
     button.style.paddingLeft = `${depth * 14 + 8}px`;
-    button.onclick = () => setFilter('dir', depth === 0 ? '' : node.path);
+    button.onclick = () => dispatch('folder-open', node.path);
+    button.oncontextmenu = event => { event.preventDefault(); dispatch('folder-context', {x: event.clientX, y: event.clientY, path: node.path}); };
     target.append(button);
     for (const child of node.children) branch(child, depth + 1);
   }

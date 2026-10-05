@@ -8,11 +8,13 @@ import {initKeys} from './keys.js';
 import {initFilters} from './filters.js';
 import {initPlayback} from './playback.js';
 import {initCompare} from './compare.js';
+import {initTools, breadcrumbs} from './tools_ui.js';
 
 let roots = [];
 let stats = null;
 let polling = false;
 let rootGeneration = 0;
+const revisions = new Map();
 
 function syncControls() {
   for (const prefix of ['', 'view-']) {
@@ -22,7 +24,7 @@ function syncControls() {
   }
   $('#search').value = state.filters.q || '';
   $('#roots').value = state.root || '';
-  $('#breadcrumb').textContent = state.filters.dir || state.rootRecord?.path || 'Your images, in your order.';
+  breadcrumbs();
   $('#rescan').disabled = !state.root;
   updateStatus();
 }
@@ -58,7 +60,7 @@ async function openRoot(path, recursive = true) {
   state.view = 'grid';
   state.index = 0;
   state.focusIndex = 0;
-  state.filters = {};
+  state.filters = state.prefs.dirMode === 'exact' ? {dir: result.root.path, dir_mode: 'exact'} : {};
   state.selected.clear();
   state.revision++;
   $('#viewer').hidden = true;
@@ -84,10 +86,12 @@ async function pollScan() {
   try {
     const job = await api(`/api/roots/${root}/scan`, {quiet: true});
     if (root !== state.root) return;
+    const revisionChanged = (revisions.get(root) ?? state.rootRecord?.revision ?? 0) !== job.revision;
+    revisions.set(root, job.revision);
     const wasRunning = $('#scan-progress').dataset.running === 'true';
     $('#scan-progress').dataset.running = String(job.running);
-    $('#scan-progress').textContent = job.running ? `${job.phase === 'files' ? 'Indexing' : 'Reading metadata'} · ${job.seen.toLocaleString()} files${job.phase === 'metadata' ? ` · ${job.meta_done}/${job.meta_total}` : ''}` : job.error ? `Scan failed: ${job.error}` : '';
-    if (job.running || wasRunning) {
+    $('#scan-progress').textContent = job.running ? `${job.phase === 'files' ? 'Indexing' : 'Reading metadata'} · ${job.seen.toLocaleString()} files${job.phase === 'metadata' ? ` · ${job.meta_done}/${job.meta_total}` : ''}` : job.error ? `Scan failed: ${job.error}` : job.watch_error || (job.prewarm_total && job.prewarm_done < job.prewarm_total ? `Warming thumbnails · ${job.prewarm_done}/${job.prewarm_total}` : '');
+    if (job.running || wasRunning || revisionChanged) {
       await refreshGrid();
       await refreshStats();
       if (job.running && !state.total) setTimeout(pollScan, 200);
@@ -95,6 +99,12 @@ async function pollScan() {
         await refreshRoots();
         if (state.view === 'viewer') await relocateCurrent();
         dispatch('scan-finished');
+        if (revisionChanged) {
+          $('#statusbar').classList.remove('updated-pulse');
+          requestAnimationFrame(() => $('#statusbar').classList.add('updated-pulse'));
+          $('#update-pulse').textContent = 'updated';
+          setTimeout(() => { $('#update-pulse').textContent = ''; }, 1800);
+        }
       }
     }
   } catch (error) { $('#scan-progress').textContent = error.message; }
@@ -135,11 +145,12 @@ async function main() {
       try { await post(`/api/roots/${state.root}/shuffle`); changeQuery({sort: 'random', order: 'asc'}); } catch { /* Already reported. */ }
     };
   }
-  initGrid(); initViewer(); initPanels(); initKeys(); initFilters(); initPlayback(); initCompare();
+  initGrid(); initViewer(); initPanels(); initKeys(); initFilters(); initPlayback(); initCompare(); initTools();
   applyPrefs();
   on('prefs-changed', applyPrefs);
   on('total-changed', updateStatus);
   on('library-changed', () => refreshStats().catch(() => {}));
+  on('open-library', path => openRoot(path).catch(() => {}));
   on('query-changed', async () => {
     rootGeneration++;
     syncControls();

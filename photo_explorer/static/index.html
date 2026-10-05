@@ -26,7 +26,7 @@
     </section>
   </main>
   <div id="selection-toolbar" hidden><strong id="selection-count"></strong><button data-batch="move">Move</button><button data-batch="copy">Copy</button><button data-batch="trash">Recycle Bin</button><button data-batch="rate">Rate</button><button data-batch="favorite">Favourite</button><button id="clear-selection">Clear</button></div>
-  <footer id="statusbar"><span id="status">Open a folder to get started</span><span id="selection-status"></span></footer>
+  <footer id="statusbar"><span id="status">Open a folder to get started</span><span id="update-pulse" role="status"></span><span id="selection-status"></span></footer>
   <section id="viewer" hidden tabindex="-1" role="dialog" aria-modal="true" aria-label="Photo viewer">
     <div id="image-stage"><img id="view-image" alt="" draggable="false"><button class="edge previous" aria-label="Previous image">‹</button><button class="edge next" aria-label="Next image">›</button></div>
     <header id="view-top" class="overlay"><button id="view-close" title="Back to grid (Esc)">✕</button><strong id="view-counter"></strong><div class="view-title"><span id="view-name"></span><small id="view-value"></small></div><div class="ordering"><select id="view-sort" aria-label="Viewer sort criterion"></select><button id="view-direction">↓ desc</button><button id="view-shuffle" hidden>Shuffle</button></div><button data-view="fit">Fit</button><button data-view="actual">1:1</button><button data-view="zoom-out" aria-label="Zoom out">−</button><span id="view-zoom">100%</span><button data-view="zoom-in" aria-label="Zoom in">+</button><button id="view-info">Info</button><button id="view-menu">Actions</button></header>

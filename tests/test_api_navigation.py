@@ -27,7 +27,9 @@ def test_delete_midwalk_and_clamp(client, indexed, monkeypatch):
     before = client.get(endpoint).json()
     index = 5
     removed = before["items"][index]["id"]
-    assert client.post(f"/api/images/{removed}/trash").json() == {"ok": True, "next_hint": None}
+    trashed = client.post(f"/api/images/{removed}/trash").json()
+    assert isinstance(trashed.pop("operation_id"), int)
+    assert trashed == {"ok": True, "next_hint": None}
     after = client.get(endpoint).json()
     assert after["total"] == before["total"] - 1
     expected = [item["id"] for item in before["items"] if item["id"] != removed]

@@ -33,6 +33,14 @@ def canonical(path: str | Path) -> str:
     return os.path.normcase(os.path.abspath(path))
 
 
+def access_path(path: str | Path) -> Path:
+    """Use Windows extended paths for filesystem access, retaining plain display paths."""
+    value = os.path.abspath(path)
+    if os.name == "nt" and len(value) > 240 and not value.startswith("\\\\?\\"):
+        value = "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
+    return Path(value)
+
+
 def validate_directory(value: str) -> Path:
     """Accept existing absolute directories without traversal segments."""
     if not value or ".." in value.replace("\\", "/").split("/"):
@@ -40,7 +48,7 @@ def validate_directory(value: str) -> Path:
     if not os.path.isabs(value):
         raise ValueError("Folder path must be absolute")
     path = Path(os.path.abspath(value))
-    if not path.is_dir():
+    if not access_path(path).is_dir():
         raise ValueError("Folder does not exist or is not accessible")
     return path
 

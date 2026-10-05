@@ -621,3 +621,36 @@ button[aria-pressed=true] {
   border-color:var(--accent);
   color:var(--accent);
 }
+
+.tool-form { display:flex; flex-direction:column; gap:10px; }
+.tool-field { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.tool-field input:not([type=checkbox]), .tool-field select { flex:1; min-width:130px; }
+.tool-actions, .sidebar-tabs { display:flex; flex-wrap:wrap; gap:6px; }
+.tool-preview { max-height:35vh; overflow:auto; }
+.plan-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+.plan-table th { text-align:left; border-bottom:1px solid var(--line); }
+.plan-thumb { display:block; width:76px; height:60px; object-fit:contain; }
+.condition-row { display:flex; gap:5px; flex-wrap:wrap; border-bottom:1px solid var(--line); padding:8px 0; }
+.condition-row input { flex:1; min-width:90px; width:100px!important; margin:0!important; }
+.structure-preview { white-space:pre; overflow:auto; max-height:40vh; background:var(--bg); padding:10px; }
+.operation-card { border-bottom:1px solid var(--line); padding:14px 0; overflow-wrap:anywhere; }
+.operation-card strong, .operation-card small { display:block; }
+.operation-card button { margin:3px; }
+.operation-card progress { width:100%; accent-color:var(--accent); }
+#folder-controls { margin:12px 0; }
+#folder-controls select { max-width:100%; }
+.tree-folder small { display:block; font-size:10px; }
+#breadcrumb button { border:0; padding:2px; background:transparent; color:var(--muted); }
+.toast button { margin-left:12px; }
+.browse-children { padding-left:16px; }
+.browse-branch summary { cursor:pointer; }
+.browse-branch button { border:0; background:transparent; }
+.settings-form h2 { margin-top:20px; }
+.settings-form progress { width:100%; accent-color:var(--accent); }
+@keyframes updated { 40% { background:var(--accent2); color:var(--accent); } }
+.updated-pulse { animation:updated 1.8s; }
+.duplicate-card { margin:16px 0; padding:12px 0; border-top:1px solid var(--line); }
+.duplicate-members { display:flex; gap:12px; overflow:auto; margin-bottom:10px; }
+.duplicate-member { display:flex; flex-direction:column; align-items:flex-start; min-width:180px; max-width:220px; overflow-wrap:anywhere; }
+.duplicate-member img { width:160px; height:110px; object-fit:contain; }
+dialog:has(.tool-form) { width:900px; max-width:94vw; }

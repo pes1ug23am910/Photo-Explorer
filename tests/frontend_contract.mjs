@@ -195,3 +195,22 @@ await keyHandler({key: 'Enter', target: {closest: () => null}, preventDefault() 
 assert.equal(opened, 1, 'Enter on the grid must open the viewer');
 assert.equal(prevented, true);
 console.log('Keyboard contract: native button activation and grid Enter behavior passed.');
+
+const {newestUndoable, structureOptions, serializeCondition, serializeRule} = await import('../photo_explorer/static/js/operation_logic.js');
+assert.equal(newestUndoable([{id: 4, status: 'running', undoable: 1}, {id: 3, status: 'done', undoable: 1, undone_by: 8},
+  {id: 2, status: 'done', undoable: 1}, {id: 1, status: 'done', undoable: 1}]).id, 2);
+assert.equal(newestUndoable([{id: 1, status: 'done', undoable: 0}]), null);
+const structure = new URLSearchParams(structureOptions('E:\\Photos & Trips', false, 'skip, E:\\A+B'));
+assert.equal(structure.get('path'), 'E:\\Photos & Trips');
+assert.equal(structure.get('files'), '0');
+assert.equal(structure.get('skip'), 'skip, E:\\A+B');
+assert.deepEqual(serializeCondition('size', 'between', '1', 'MB', '5'), {field: 'size', op: 'between', value: [1048576, 5242880]});
+assert.equal(serializeCondition('size', 'lt', '100', 'KB').value, 102400);
+assert.deepEqual(serializeCondition('ext', 'in', '.PNG; jpg').value, ['png', 'jpg']);
+assert.equal(serializeCondition('favorite', 'is', 'false').value, false);
+assert.throws(() => serializeCondition('size', 'gt', 'abc'));
+const rule = serializeRule({name: 'test', root: 1, dir: null, dirMode: 'exact', ids: [3, 5], others: false, match: 'any',
+  conditions: [serializeCondition('name', 'suffix', '-t')], type: 'move', dest: 'E:\\Temp', collision: 'skip', createDest: true});
+assert.deepEqual(rule.scope, {root_id: 1, dir: null, dir_mode: 'exact', include_other_files: false, ids: [3, 5]});
+assert.equal(rule.action.create_dest, true);
+console.log('Frontend contract: undo choice, structure encoding, typed rule values and scope serialization passed.');

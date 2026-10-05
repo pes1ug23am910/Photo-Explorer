@@ -72,14 +72,32 @@ export async function browseFolder(initial = '', title = 'Choose a folder', show
   async function populate(path) {
     const token = ++browseToken;
     try {
-      const folders = await api(`/api/fs/browse?${new URLSearchParams(path ? {path} : {})}`);
+      const folders = await api(`/api/fs/browse?${new URLSearchParams(path ? {path, counts: '1'} : {})}`);
       if (token !== browseToken) return;
       input.value = path;
-      list.replaceChildren(...folders.map(folder => {
-        const button = el('button', {type: 'button'}, `▸ ${folder.name}`);
-        button.onclick = () => populate(folder.path);
-        return button;
-      }));
+      function branch(folder) {
+        const details = el('details', {class: 'browse-branch'});
+        const summary = el('summary');
+        const button = el('button', {type: 'button'}, `${folder.name}${folder.images_direct !== undefined ? ` · ${folder.images_direct ?? '?'} images` : ''}`);
+        button.onclick = event => { event.preventDefault(); input.value = folder.path; details.open = !details.open; };
+        summary.append(button);
+        details.append(summary);
+        let loaded = false;
+        details.ontoggle = async () => {
+          if (!details.open || loaded) return;
+          loaded = true;
+          try {
+            const children = await api(`/api/fs/browse?${new URLSearchParams({path: folder.path, counts: '1'})}`);
+            if (token !== browseToken) return;
+            const nested = el('div', {class: 'browse-children'});
+            nested.append(...children.map(branch));
+            if (!children.length) nested.append(el('small', {}, 'No subfolders'));
+            details.append(nested);
+          } catch { loaded = false; }
+        };
+        return details;
+      }
+      list.replaceChildren(...folders.map(branch));
       if (!folders.length) list.append(el('p', {class: 'muted'}, 'No subfolders. Choose this folder or go up.'));
     } catch { /* Request helper reports errors without closing the dialog. */ }
   }
@@ -93,7 +111,7 @@ export async function browseFolder(initial = '', title = 'Choose a folder', show
     populate(path);
   };
   populate(initial);
-  const result = await dialog(title, content, [{label: 'Cancel', value: 'cancel'}, {label: 'Choose folder', value: 'ok', primary: true}]);
+  const result = await dialog(title, content, [{label: 'Cancel', value: 'cancel'}, {label: showRecursive ? 'Open' : 'Choose folder', value: 'ok', primary: true}]);
   browseToken++;
   return result === 'ok' && input.value ? {path: input.value, recursive: recursive.checked} : null;
 }
@@ -176,8 +194,19 @@ export async function action(kind) {
     return;
   }
   let done = 0;
+  let operationId = null;
   try {
-    for (const id of ids) { await post(`/api/images/${id}/${kind}`, body); done++; }
+    if (ids.length > 1 && ['move', 'copy', 'trash'].includes(kind)) {
+      const result = await post('/api/operations/batch', {ids, kind, ...body});
+      operationId = result.operation_id;
+      done = result.done || 0;
+    } else {
+      for (const id of ids) {
+        const result = await post(`/api/images/${id}/${kind}`, body);
+        operationId = result.operation_id || operationId;
+        done++;
+      }
+    }
   } finally {
     state.selected.clear();
     await refreshGrid();
@@ -186,7 +215,8 @@ export async function action(kind) {
       else await relocateCurrent();
     }
     dispatch('library-changed');
-    if (done) toast(`${done} image${done === 1 ? '' : 's'}: ${kind} complete`, true);
+    if (operationId) dispatch('operation-start', operationId);
+    else if (done) toast(`${done} image${done === 1 ? '' : 's'}: ${kind} complete`, true);
   }
 }
 
@@ -230,19 +260,30 @@ export async function settingsDialog() {
   const intervalLabel = el('label', {}, 'Slideshow interval (1–60 seconds)');
   intervalLabel.append(interval);
   content.append(intervalLabel);
+  const {cacheSettings} = await import('./settings_ui.js');
+  const readCacheSettings = await cacheSettings(content);
   const result = await dialog('Viewer settings', content, [{label: 'Cancel', value: 'cancel'}, {label: 'Save', value: 'ok', primary: true}]);
   if (result === 'ok') savePrefs({...Object.fromEntries(Object.entries(controls).map(([key, input]) => [key, input.checked])),
-    wheelMode: wheel.value, slideInterval: Math.max(1, Math.min(60, Number(interval.value) || 4))});
+    wheelMode: wheel.value, slideInterval: Math.max(1, Math.min(60, Number(interval.value) || 4)), ...readCacheSettings()});
 }
 
 export function initPanels() {
-  modal.addEventListener('close', () => {
+  const settle = value => {
     const pending = pendingDialog;
     pendingDialog = null;
-    pending?.resolve(modal.returnValue);
-    pending?.previousFocus?.focus({preventScroll: true});
-  });
+    if (!pending) return;
+    modal.returnValue = value;
+    pending.resolve(value);
+    pending.previousFocus?.focus({preventScroll: true});
+  };
+  modal.addEventListener('close', () => settle(modal.returnValue));
   modal.addEventListener('cancel', () => { modal.returnValue = 'cancel'; });
+  // A dialog-method form submit closes the dialog synchronously, but the close event is queued and
+  // can arrive late (or not at all while the tab is hidden), so settle on the submit itself as well.
+  $('form', modal).addEventListener('submit', event => {
+    const value = event.submitter?.value ?? 'cancel';
+    queueMicrotask(() => settle(value));
+  });
   modal.addEventListener('keydown', event => {
     if (event.key !== 'Tab') return;
     const focusable = $$('button,input,select,textarea,a[href]', modal).filter(node => !node.disabled && !node.hidden);

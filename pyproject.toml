@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photo-explorer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Offline photo browser with deterministic criteria-ordered navigation"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.142,<1", "uvicorn[standard]>=0.30,<1", "pillow>=12.3,<13", "pillow-heif>=1.8,<2", "send2trash>=1.8,<3"]
+dependencies = ["fastapi>=0.142,<1", "uvicorn[standard]>=0.30,<1", "pillow>=12.3,<13", "pillow-heif>=1.8,<2", "send2trash>=1.8,<3", "watchdog>=6,<7"]
 
 [project.scripts]
 photo-explorer = "photo_explorer.__main__:main"

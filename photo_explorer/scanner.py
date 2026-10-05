@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Iterator
 
-from .config import EXTENSIONS, canonical, visible_name
+from .config import EXTENSIONS, access_path, canonical, visible_name
 from .db import Database
 from .metadata import natural_key, read_metadata
 
@@ -29,8 +29,9 @@ def walk_images(path: Path, recursive: bool, skipped: list[str] | None = None) -
     stack = [path]
     while stack:
         current = stack.pop()
+        extended = os.name == "nt" and len(str(current)) > 240
         try:
-            entries = os.scandir(current)
+            entries = os.scandir(access_path(current))
         except OSError:
             if current == path:
                 raise
@@ -43,22 +44,25 @@ def walk_images(path: Path, recursive: bool, skipped: list[str] | None = None) -
                     continue
                 if entry.is_dir(follow_symlinks=False):
                     if recursive:
-                        stack.append(Path(entry.path))
-                elif Path(entry.name).suffix.lower().lstrip(".") in EXTENSIONS:
+                        stack.append(current / entry.name if extended else Path(entry.path))
+                elif os.path.splitext(entry.name)[1].lower().lstrip(".") in EXTENSIONS:
                     try:
                         if entry.is_file(follow_symlinks=False):
-                            yield Path(entry.path), entry.stat(follow_symlinks=False)
+                            yield current / entry.name if extended else Path(entry.path), entry.stat(follow_symlinks=False)
                     except FileNotFoundError:
                         continue
 
 
-def basic_record(root_id: int, path: Path, stat: os.stat_result | None = None) -> dict:
+def basic_record(root_id: int, path: Path, stat: os.stat_result | None = None, identity: str | None = None) -> dict:
     """Prepare cheap index fields without opening an image."""
-    stat = stat or path.stat()
+    stat = stat or access_path(path).stat()
+    display_path = os.fspath(path) if identity is not None else os.path.abspath(path)
+    identity = identity or canonical(display_path)
+    name = path.name
     return {
-        "root_id": root_id, "path": canonical(path), "display_path": os.path.abspath(path),
-        "dir": canonical(path.parent), "name": path.name, "name_key": natural_key(path.name),
-        "ext": path.suffix.lower().lstrip("."), "size": stat.st_size,
+        "root_id": root_id, "path": identity, "display_path": display_path,
+        "dir": os.path.dirname(identity), "name": name, "name_key": natural_key(name),
+        "ext": os.path.splitext(name)[1].lower().lstrip("."), "size": stat.st_size,
         "mtime": stat.st_mtime, "ctime": getattr(stat, "st_birthtime", stat.st_ctime),
         "sort_date": stat.st_mtime, "rnd": random.random(), "indexed_at": time.time(),
     }
@@ -78,7 +82,17 @@ def upsert_records(db: Database, records: list[dict]) -> None:
         "WHERE images.size != excluded.size OR images.mtime != excluded.mtime"
     )
     with db.connect() as connection:
-        connection.executemany(sql, [tuple(record[column] for column in columns) for record in records])
+        connection.execute("BEGIN IMMEDIATE")
+        reserved = connection.execute("SELECT MAX(image_id) FROM operation_images").fetchone()[0]
+        if reserved is not None:
+            highest = connection.execute("SELECT MAX(id) FROM images").fetchone()[0] or 0
+            start = max(highest, reserved) + 1
+            insert_columns = ("id", *columns)
+            sql = sql.replace(f"({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                              f"({','.join(insert_columns)}) VALUES ({','.join('?' for _ in insert_columns)})", 1)
+            connection.executemany(sql, [(start + index, *(record[column] for column in columns)) for index, record in enumerate(records)])
+        else:
+            connection.executemany(sql, [tuple(record[column] for column in columns) for record in records])
 
 
 def metadata_result(row: dict) -> tuple[dict, dict]:
@@ -114,6 +128,7 @@ class Scanner:
         self.guard = threading.RLock()
         self.stopping = threading.Event()
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="scan")
+        self.on_complete = lambda root_id: None
 
     def root_lock(self, root_id: int) -> threading.RLock:
         """Share a root mutation lock with file actions and forgetting roots."""
@@ -131,7 +146,7 @@ class Scanner:
     def update(self, root_id: int, **fields) -> None:
         """Publish job progress."""
         with self.guard:
-            self.jobs[root_id].update(fields)
+            self.jobs.setdefault(root_id, self.status(root_id)).update(fields)
 
     def start(self, root_id: int) -> dict:
         """Start a scan or return the job already running for this root."""
@@ -140,7 +155,9 @@ class Scanner:
                 return self.status(root_id)
             if self.stopping.is_set():
                 raise ValueError("Scanner is shutting down")
+            auxiliary = {key: value for key, value in self.jobs.get(root_id, {}).items() if key.startswith(("dup_", "prewarm_"))}
             self.jobs[root_id] = {
+                **auxiliary,
                 "running": True, "phase": "files", "seen": 0, "indexed": 0, "removed": 0, "skipped": 0,
                 "meta_done": 0, "meta_total": 0, "started": time.time(), "finished": None, "error": None,
             }
@@ -156,7 +173,10 @@ class Scanner:
                 self.phase_one(root)
                 if not self.stopping.is_set():
                     self.phase_two(root_id)
-                    self.db.execute("UPDATE roots SET last_scan=? WHERE id=?", (time.time(), root_id))
+                    from .explorer import refresh_counts
+                    refresh_counts(self.db, root)
+                    self.db.execute("UPDATE roots SET last_scan=?,revision=revision+1 WHERE id=?", (time.time(), root_id))
+                    self.on_complete(root_id)
             self.update(root_id, phase="done" if not self.stopping.is_set() else "cancelled")
         except Exception as exc:
             self.update(root_id, error=str(exc), phase="failed")
@@ -169,20 +189,22 @@ class Scanner:
         old = {row["path"]: row for row in self.db.all("SELECT path,size,mtime FROM images WHERE root_id=?", (root_id,))}
         seen: set[str] = set()
         batch: list[dict] = []
+        batch_size = 500
         changed = 0
         skipped: list[str] = []
-        for path, stat in walk_images(Path(root["path"]), bool(root["recursive"]), skipped):
+        for path, stat in walk_images(Path(root["path"]).absolute(), bool(root["recursive"]), skipped):
             if self.stopping.is_set():
                 return
-            identity = canonical(path)
+            identity = os.path.normcase(os.fspath(path))
             seen.add(identity)
             previous = old.get(identity)
             if previous is None or previous["size"] != stat.st_size or previous["mtime"] != stat.st_mtime:
-                batch.append(basic_record(root_id, path, stat))
+                batch.append(basic_record(root_id, path, stat, identity))
                 changed += 1
-            if len(batch) >= 500:
+            if len(batch) >= batch_size:
                 upsert_records(self.db, batch)
                 batch.clear()
+                batch_size = 2000
             if len(seen) % 500 == 0:
                 self.update(root_id, seen=len(seen), indexed=changed)
         upsert_records(self.db, batch)
