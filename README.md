@@ -10,12 +10,46 @@ Double-click `run.bat`, or run from this folder:
 .\.venv\Scripts\python.exe -m photo_explorer "D:\Pictures"
 ```
 
-The launcher binds **127.0.0.1 only**, prints its URL, and opens an Edge app window (Chrome or the default browser is the fallback). Leave the terminal running; Ctrl+C stops the server. Closing the window alone leaves the server running.
+The launcher binds **127.0.0.1 only**, prints its URL when a console is available, and opens an Edge app window (Chrome or the default browser is the fallback). Closing the app window stops the server. Ctrl+C and **Tools → Quit** also stop it gracefully. Source development remains available through `run.bat` and `python -m photo_explorer`.
 
 ```text
 python -m photo_explorer [FOLDER] [--port N] [--no-browser]
   [--no-recursive] [--home DIR] [--browser auto|edge|chrome|default]
+  [--keep-running] [--no-tray] [--verbose] [--version]
 ```
+
+`--no-browser` never auto-exits and never starts a tray icon. `--no-tray` suppresses the notification icon. `--keep-running` keeps the server available after its window closes. `--verbose` enables debug logging and HTTP access logs. `--version` prints the version and exits. The internal `--pick-folder [--title TEXT]` mode shows only the native folder picker and returns the selected path as UTF-8; cancel returns an empty line.
+
+## Install
+
+The optional Windows distribution is an unsigned, windowed **folder build**. After installing the runtime and build dependencies in the project virtual environment, build it with:
+
+```powershell
+.\.venv\Scripts\python.exe packaging\build_exe.py
+.\.venv\Scripts\python.exe packaging\smoke_exe.py
+```
+
+With that interpreter activated, the build command is `python packaging/build_exe.py`. Run `dist\PhotoExplorer\PhotoExplorer.exe`, or extract the versioned `dist\PhotoExplorer-<version>-win64.zip` and run the exe inside its folder. Keep `_internal` beside the exe; copying the exe alone will not work. Right-click the exe or its shortcut to pin it to Start or the taskbar.
+
+The build is **unsigned**. Windows SmartScreen can show **unknown publisher**, and antivirus products may inspect or block a locally built executable. Only choose **More info → Run anyway** for a build you trust. No installer or signing tool is needed for the folder distribution.
+
+Data lives in `%LOCALAPPDATA%\PhotoExplorer` by default, including the index, thumbnails, logs, backups, operation manifests, and dedicated browser profile. `--home` or `PHOTO_EXPLORER_HOME` overrides that location. Uninstall by quitting Photo Explorer and deleting its distribution folder and that data directory; deleting the data directory also removes saved libraries, annotations and history. Original photo folders are separate.
+
+## Desktop lifetime and tray
+
+Edge/Chrome uses a dedicated `home\browser-profile`, so a normal browser session does not own the app window. Photo Explorer watches its process and also receives page heartbeats. Reloads get a ten-second grace period; a missing heartbeat for 150 seconds is the fallback. The default-browser fallback relies on these page signals and may take ten seconds after closing. A suspended or unresponsive page can reach the 150-second timeout. Headless runs remain available until explicitly stopped.
+
+The tray menu provides **Open window**, **Keep running in background**, **Diagnostics**, and **Quit**. Its background checkbox mirrors `--keep-running`. Tray failures are logged and leave the app usable. Quit stops watching, cancels operations between entries, flushes cache usage, closes backup/index workers and requests server shutdown, with a 20-second join cap. A filesystem call or decoder stuck in native code can outlast cancellation.
+
+Only one serving instance runs per home. A second launch focuses/reopens that instance; a folder argument registers the folder and selects it in the window. A second `--no-browser` launch prints the existing URL and exits. Separate homes can run independently. Crashed or unresponsive instance records are recovered on launch.
+
+## Diagnostics
+
+**Settings → Diagnostics** shows the version, home, log path, library size, cache usage and watcher status. **Open log folder** reveals the logs in Explorer; **Copy diagnostics** copies the current snapshot and last 200 log lines. The tray's **Diagnostics** action opens this section directly.
+
+Logs are UTF-8 at `home\logs\app.log`, with four rotated backups (five files total, 2 MiB each). Startup, operation boundaries, scans, eviction, watcher fallback, shutdown reasons and unhandled exceptions are logged. Logs do not include photo contents or EXIF values. Diagnostics include local filesystem paths, so review the copied text before sharing it.
+
+Desktop APIs are `/api/diagnostics`, `/api/diagnostics/open-log-folder`, `/api/heartbeat`, `/api/window-closed`, `/api/focus` and `/api/shutdown`. Control requests must be local and cannot come from foreign origins.
 
 Use **Open folder** for the native picker, **Browse…** for the in-app folder browser (which also has an include-subfolders checkbox), or reopen a recent library. Click selects; double-click or Enter opens the viewer. Sort and direction remain available inside the viewer. The first scan lists files immediately, then fills metadata in the background; metadata-based order can settle as the scan progresses.
 
@@ -86,8 +120,8 @@ Install the runtime and test dependencies before running these commands. `requir
 ```powershell
 $env:PHOTO_EXPLORER_HOME = "$PWD\.work\home"
 .\.venv\Scripts\python.exe tools\make_samples.py .work\samples --count 80 --seed 7
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m photo_explorer .work\samples --no-browser --port 8765 --home .work\home
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+.\.venv\Scripts\python.exe -m photo_explorer .work\samples --no-browser --no-tray --port 8765 --home .work\home
 ```
 
 Tests create private libraries and home directories under `.work/pytest`, replace Recycle Bin and native system calls, and exercise every sort direction and filter plus the ordered-navigation acceptance test. The optional Node runtime runs a navigation-module contract test without a browser or npm. A deprecation warning from the installed Starlette/httpx test integration may appear; the installed client remains usable.

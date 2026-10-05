@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import random
 import threading
 import time
@@ -13,6 +14,8 @@ from typing import Iterator
 from .config import EXTENSIONS, access_path, canonical, visible_name
 from .db import Database
 from .metadata import natural_key, read_metadata
+
+log = logging.getLogger(__name__)
 
 META_COLUMNS = (
     "width", "height", "pixels", "aspect", "orient", "taken", "camera", "lens", "iso", "fnumber",
@@ -165,6 +168,7 @@ class Scanner:
             return self.status(root_id)
 
     def _run(self, root_id: int) -> None:
+        log.info("Scan start root=%s", root_id)
         try:
             with self.root_lock(root_id):
                 root = self.db.one("SELECT * FROM roots WHERE id=?", (root_id,))
@@ -182,6 +186,10 @@ class Scanner:
             self.update(root_id, error=str(exc), phase="failed")
         finally:
             self.update(root_id, running=False, finished=time.time())
+            job = self.status(root_id)
+            log.info("Scan finish root=%s phase=%s seen=%s indexed=%s removed=%s skipped=%s metadata=%s/%s",
+                     root_id, job["phase"], job["seen"], job["indexed"], job["removed"], job["skipped"],
+                     job["meta_done"], job["meta_total"])
 
     def phase_one(self, root: dict) -> None:
         """Index stat-only batches, then prune missing files after a complete walk."""

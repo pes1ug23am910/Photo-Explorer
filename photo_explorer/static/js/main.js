@@ -1,9 +1,10 @@
 /** Wire the local library, ordering controls, and restorable navigation state. */
+import './lifecycle.js';
 import {$, el, api, post, dispatch, on, debounce, sizeText, toast} from './api.js';
 import {state, sorts, query, defaultOrder, changeQuery, readHash, writeHash, loadPrefs, savePrefs, activeFilters} from './state.js';
 import {initGrid, refreshGrid, selectionStatus} from './grid.js';
 import {initViewer, openViewer, closeViewer, relocateCurrent} from './viewer.js';
-import {initPanels, chooseFolder} from './panels.js';
+import {initPanels, chooseFolder, settingsDialog} from './panels.js';
 import {initKeys} from './keys.js';
 import {initFilters} from './filters.js';
 import {initPlayback} from './playback.js';
@@ -172,13 +173,18 @@ async function main() {
   $('#rescan').onclick = () => post(`/api/roots/${state.root}/rescan`).then(pollScan).catch(() => {});
   $('#sidebar-toggle').onclick = () => savePrefs({sidebar: !state.prefs.sidebar});
   $('.brand').onclick = event => { event.preventDefault(); if (state.view === 'viewer') closeViewer().catch(() => {}); else $('#grid').focus(); };
-  window.addEventListener('hashchange', () => restore().catch(() => {}));
+  on('show-diagnostics', () => settingsDialog(true).catch(() => {}));
+  window.addEventListener('hashchange', () => {
+    if (location.hash === '#diagnostics') settingsDialog(true).catch(() => {});
+    else refreshRoots().then(restore).catch(() => {});
+  });
   await Promise.all([loadPrefs(), refreshRoots()]);
   const params = new URLSearchParams(location.search);
   if (params.get('open')) await openRoot(params.get('open'), params.get('recursive') !== '0');
   else await restore();
   setInterval(pollScan, 2000);
   pollScan();
+  if (location.hash === '#diagnostics') settingsDialog(true).catch(() => {});
 }
 
 main().catch(error => toast(`Could not start: ${error.message}`));

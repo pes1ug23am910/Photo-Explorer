@@ -237,7 +237,7 @@ export function contextMenu({x, y}) {
   $('button', menu)?.focus();
 }
 
-export async function settingsDialog() {
+export async function settingsDialog(focusDiagnostics = false) {
   const content = el('div', {class: 'settings-form'});
   const controls = {};
   for (const [key, label] of [['upscale', 'Upscale small images in Fit mode'], ['skipConfirm', 'Skip Recycle Bin confirmation'],
@@ -262,7 +262,9 @@ export async function settingsDialog() {
   content.append(intervalLabel);
   const {cacheSettings} = await import('./settings_ui.js');
   const readCacheSettings = await cacheSettings(content);
-  const result = await dialog('Viewer settings', content, [{label: 'Cancel', value: 'cancel'}, {label: 'Save', value: 'ok', primary: true}]);
+  const pending = dialog('Viewer settings', content, [{label: 'Cancel', value: 'cancel'}, {label: 'Save', value: 'ok', primary: true}]);
+  if (focusDiagnostics) requestAnimationFrame(() => $('#diagnostics-section')?.scrollIntoView({block: 'start'}));
+  const result = await pending;
   if (result === 'ok') savePrefs({...Object.fromEntries(Object.entries(controls).map(([key, input]) => [key, input.checked])),
     wheelMode: wheel.value, slideInterval: Math.max(1, Math.min(60, Number(interval.value) || 4)), ...readCacheSettings()});
 }

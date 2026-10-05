@@ -127,6 +127,7 @@ function menu(x, y, path = currentFolder(), folder = false) {
   choices.push(['Flatten…', () => flattenDialog(path)], ['Rules…', () => rulesDialog(path)],
     ['Export structure…', () => structureDialog(path)]);
   if (!folder) choices.push(['Duplicates…', duplicatesDialog]);
+  if (!folder) choices.push(['Quit', async () => { const {quit} = await import('./lifecycle.js'); await quit(); }]);
   if (folder) choices.push(['Reveal in Explorer', () => post('/api/fs/reveal', {path})]);
   target.replaceChildren(...choices.map(([label, handler]) => button(label, async () => { target.hidden = true; await handler(); })));
   target.hidden = false;

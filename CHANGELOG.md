@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Added a windowed Windows folder distribution, versioned ZIP, generated icon and Windows version metadata.
+- Added frozen resource lookup and an isolated native folder-picker mode with UTF-8 pipe output.
+- Added rotating file logs, exception hooks, diagnostics APIs and a Diagnostics section in Settings.
+- Added dedicated browser profiles, process lifetime tracking, reload grace, page heartbeats and graceful Quit.
+- Added an optional tray icon with Open window, Keep running in background, Diagnostics and Quit.
+- Added per-home single-instance ownership, stale-lock recovery and second-launch folder forwarding.
+- Added offline build tooling, a fresh-home executable smoke covering HEIC decoding, and desktop lifecycle tests.
+- Retained the source workflow, existing library features, settings, shortcuts and endpoints.
+
 ## 0.2.0
 
 - Added a persistent operations journal, manifests, cancellable batches, conservative undo, and Ctrl+Z.

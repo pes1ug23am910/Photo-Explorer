@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,8 @@ from . import fileops
 from .config import EXTENSIONS, access_path, canonical, inside
 from .db import Database
 from .transfers import transfer_file
+
+log = logging.getLogger(__name__)
 
 
 class AppliedError(RuntimeError):
@@ -72,6 +75,7 @@ class Operations:
             "VALUES (?,?,?,?,?,'running',?,?,?)",
             (kind, label, root_id, json.dumps(params), time.time(), len(plan), int(undoable), undoes))
         self.manifest(op_id)
+        log.info("Operation start id=%s kind=%s entries=%s", op_id, kind, len(plan))
         args = (op_id, params, plan, executor or self.execute, finalize)
         asynchronous = len(plan) > 200 if background is None else background
         if asynchronous:
@@ -122,6 +126,7 @@ class Operations:
             self.db.execute("UPDATE operations SET done=?,failed=?,finished=?,status=?,params=? WHERE id=?",
                             (done, failed, time.time(), status, json.dumps(params), op_id))
             self.manifest(op_id)
+            log.info("Operation finish id=%s status=%s done=%s failed=%s", op_id, status, done, failed)
             self.cancelled.discard(op_id)
             kind = self.db.one("SELECT kind FROM operations WHERE id=?", (op_id,))["kind"]
             if len(plan) > 1 or kind in {"flatten", "rule", "duplicates", "undo"}:

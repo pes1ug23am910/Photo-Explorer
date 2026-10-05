@@ -1,5 +1,5 @@
 /** Library maintenance preferences without changing viewer controls. */
-import {el, api, post, sizeText} from './api.js';
+import {el, api, post, sizeText, toast} from './api.js';
 import {state} from './state.js';
 import {input, line, button} from './tool_forms.js';
 
@@ -25,5 +25,29 @@ export async function cacheSettings(content) {
     el('h2', {}, 'Library'), line('Watch folders', watch),
     el('p', {class: 'muted'}, health.last_backup ? `Latest index backup: ${health.last_backup} · newest 7 days kept` : 'No index backup available'));
   await refresh();
+  await diagnosticsSettings(content);
   return () => ({cacheMaxMB: Number(cap.value), prewarm: prewarm.checked, watchFolders: watch.checked});
+}
+
+async function diagnosticsSettings(content) {
+  const info = await api('/api/diagnostics');
+  const section = el('section', {id: 'diagnostics-section'});
+  section.append(el('h2', {}, 'Diagnostics'));
+  const details = el('dl', {class: 'diagnostics-details'});
+  for (const [label, value] of [
+    ['Version', `${info.version} · ${info.frozen ? 'Desktop build' : 'Source'} · Python ${info.python}`],
+    ['Home', info.home], ['Log file', info.log_path],
+    ['Library', `${info.roots} folders · ${info.images.toLocaleString()} images`],
+    ['Cache usage', `${sizeText(info.cache.bytes)} / ${sizeText(info.cache.cap_bytes)} · ${info.cache.files} files`],
+    ['Watcher', info.watcher.error || info.watcher.mode || 'Not running'],
+  ]) details.append(el('dt', {}, label), el('dd', {}, String(value)));
+  const actions = el('div', {class: 'tool-actions'});
+  actions.append(button('Open log folder', () => post('/api/diagnostics/open-log-folder')),
+    button('Copy diagnostics', async () => {
+      const current = await api('/api/diagnostics');
+      await navigator.clipboard.writeText(JSON.stringify(current, null, 2));
+      toast('Diagnostics copied', true);
+    }));
+  section.append(details, actions);
+  content.append(section);
 }

@@ -16,17 +16,6 @@ from .config import EXTENSIONS, access_path, validate_directory, visible_name
 from .explorer import structure
 
 router = APIRouter(prefix="/api/fs")
-PICK_SCRIPT = """
-import tkinter as tk
-from tkinter import filedialog
-root = tk.Tk()
-root.withdraw()
-root.attributes('-topmost', True)
-try:
-    print(filedialog.askdirectory(parent=root, title='Open a photo folder', mustexist=True) or '')
-finally:
-    root.destroy()
-"""
 
 
 @router.get("/browse")
@@ -62,7 +51,11 @@ def browse(path: str | None = None, counts: bool = False) -> list[dict]:
 @router.post("/pick")
 def pick() -> dict:
     """Run Tk in an isolated child process, with a five-minute lifetime limit."""
-    result = subprocess.run([sys.executable, "-c", PICK_SCRIPT], capture_output=True, text=True,
+    args = [sys.executable]
+    if not getattr(sys, "frozen", False):
+        args.extend(["-m", "photo_explorer"])
+    args.append("--pick-folder")
+    result = subprocess.run(args, capture_output=True, text=True,
                             encoding="utf-8", timeout=300, check=True,
                             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

@@ -22,17 +22,18 @@ def test_picker_child_process(client, library, monkeypatch):
         return subprocess.CompletedProcess(args, 0, stdout=str(library) + "\n", stderr="")
     monkeypatch.setattr(subprocess, "run", run)
     assert client.post("/api/fs/pick").json() == {"path": str(library)}
-    assert calls[0][0][:2] == [sys.executable, "-c"]
+    # The picker runs as an internal mode of the application itself, so the same argv shape
+    # works for the source tree (-m photo_explorer --pick-folder) and the frozen executable.
+    assert calls[0][0][0] == sys.executable and calls[0][0][-1] == "--pick-folder"
     assert calls[0][1]["timeout"] == 300
     assert not calls[0][1].get("shell")
 
 
 def test_settings_health_and_local_protection(client, isolated_home):
+    from photo_explorer import __version__
     health = client.get("/api/health").json()
     assert health.pop("last_backup").endswith('.db')
-    assert health == {"ok": True, "version": "0.1.0", "home": str(isolated_home.resolve())} or health == {
-        "ok": True, "version": "0.2.0", "home": str(isolated_home.resolve())}
-    assert health["version"] == "0.2.0"
+    assert health == {"ok": True, "version": __version__, "home": str(isolated_home.resolve())}
     prefs = {"theme": "light", "thumbSize": 250}
     assert client.put("/api/settings", json=prefs).json() == prefs
     assert client.get("/api/settings").json() == prefs

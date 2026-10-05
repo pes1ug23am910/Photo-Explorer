@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import threading
 import time
 from collections import defaultdict
@@ -12,6 +13,8 @@ from pathlib import Path
 from .config import access_path, canonical, validate_directory
 from .fileops import ConflictError
 from .transfers import Names
+
+log = logging.getLogger(__name__)
 
 
 def sha256(path: Path) -> str:
@@ -49,6 +52,7 @@ class Duplicates:
             return {"run_id": run_id}
 
     def _scan(self, root_id: int, run_id: int) -> None:
+        log.info("Duplicate scan start root=%s run=%s", root_id, run_id)
         error = None
         count = 0
         try:
@@ -99,6 +103,8 @@ class Duplicates:
             self.db.execute("UPDATE dup_runs SET groups=?,finished=?,status=?,error=? WHERE id=?",
                             (count, time.time(), "failed" if error else "done", error, run_id))
             self.scanner.update(root_id, dup_running=False, dup_error=error)
+            log.info("Duplicate scan finish root=%s run=%s groups=%s status=%s",
+                     root_id, run_id, count, "failed" if error else "done")
             with self.guard:
                 self.active.pop(root_id, None)
 

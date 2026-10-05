@@ -155,12 +155,14 @@ class Watcher:
                         observer.start()
                         self.observer = observer
                         self.error = None
+                        log.info("Folder observer started: %s", type(observer).__name__)
                         break
                     except Exception:
                         observer.stop()
                         if observer.is_alive():
                             observer.join(timeout=5)
                         log.exception("Folder observer failed to start")
+                        log.warning("Trying polling fallback if available")
                         self.error = "Folder watching unavailable; use Rescan"
             if self.observer is None:
                 return

@@ -73,6 +73,8 @@ class CachePolicy:
         self.flush()
         total = self.stats()["bytes"]
         cap = self.cap()
+        before = total
+        removed = 0
         rows = self.db.all("SELECT * FROM cache_keys WHERE kind!='legacy' ORDER BY last_used,key,kind")
         known = {self.path(row["key"], row["kind"]) for row in rows}
         for row in rows:
@@ -86,6 +88,7 @@ class CachePolicy:
                 self.path(key, row["kind"]).unlink(missing_ok=True)
                 self.db.execute("DELETE FROM cache_keys WHERE root_id=? AND key=? AND kind=?", (row["root_id"], key, row["kind"]))
                 total -= row["bytes"] or 0
+                removed += 1
         for path in self.cache.directory.glob("*/*"):
             if path not in known and path.suffix in {".jpg", ".png"}:
                 key = path.name.split("_", 1)[0]
@@ -96,6 +99,11 @@ class CachePolicy:
                     if not self.db.one("SELECT key FROM cache_keys WHERE key=? AND kind=?", (key, path.name[41:])):
                         path.unlink(missing_ok=True)
         self.last_eviction = now
+        # Routine passes that remove nothing stay out of the INFO log, which would otherwise fill with them.
+        if removed:
+            log.info("Cache eviction removed %s derivatives: bytes %s -> %s (cap %s)", removed, before, total, cap)
+        else:
+            log.debug("Cache eviction pass: bytes=%s cap=%s, nothing to remove", total, cap)
 
     def clear(self, root_id: int | None = None) -> dict:
         """Clear derivative files; original images and annotations are untouched."""
@@ -188,7 +196,11 @@ class CachePolicy:
                         del jobs[root_id][:done]
                         progress[root_id] += done
                         self.scanner.update(root_id, prewarm_done=progress[root_id])
-                        self.evict()
+                        # A full eviction pass scans every cache row and file, so during pre-warm it runs
+                        # only when the cap is exceeded or once a minute, not after every batch.
+                        if time.time() - evicted >= 60 or self.stats()["bytes"] > self.cap():
+                            self.evict()
+                            evicted = time.time()
                     if not jobs[root_id] or (not done and time.time() - self.last_request >= 1):
                         del jobs[root_id]
             except Exception:

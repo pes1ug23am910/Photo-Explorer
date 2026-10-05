@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,12 @@ MIME_TYPES = {
     "png": "image/png", "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp",
     "avif": "image/avif", "ico": "image/x-icon", "svg": "image/svg+xml",
 }
+
+
+def resource_path(relative: str) -> Path:
+    """Locate bundled resources in both source and folder distributions."""
+    base = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).parent
+    return base / relative
 
 
 def home_directory(override: str | Path | None = None) -> Path:
