@@ -71,10 +71,14 @@ class WindowManager:
         with self.guard:
             if self.lifecycle.stopping.is_set():
                 return
-            if self.process is not None and self.process.poll() is None:
+            owned = self.process is not None and self.process.poll() is None
+            # A running browser may host the window after our launcher process has exited, so a
+            # recent heartbeat also counts as an open window; the page then focuses itself.
+            if owned or self.lifecycle.page_alive():
                 self.sequence += 1
                 self.page_command = {"sequence": self.sequence, "fragment": fragment}
-                self._focus()
+                if owned:
+                    self._focus()
                 return
             self.lifecycle.heartbeat()
             self.process = open_window(self.url.split('#')[0] + fragment if fragment else self.url, self.choice, self.home)

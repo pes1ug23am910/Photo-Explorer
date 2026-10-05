@@ -45,7 +45,7 @@ Data lives in `%LOCALAPPDATA%\PhotoExplorer` by default, including the index, th
 
 ## Desktop lifetime and tray
 
-Edge/Chrome uses a dedicated `home\browser-profile`, so a normal browser session does not own the app window. Photo Explorer watches its process and also receives page heartbeats. Reloads get a ten-second grace period; a missing heartbeat for 150 seconds is the fallback. The default-browser fallback relies on these page signals and may take ten seconds after closing. A suspended or unresponsive page can reach the 150-second timeout. Headless runs remain available until explicitly stopped.
+Edge/Chrome uses a dedicated `home\browser-profile`, so a normal browser session does not own the app window. Photo Explorer watches the browser process it started and also receives page heartbeats every five seconds. Closing the window stops the app about ten seconds later: the page's closing beacon or the browser's exit starts a ten-second grace period that only a fresh heartbeat (a reload, or a window adopted by an already-running browser) can cancel. A missing heartbeat for 150 seconds is the fallback for suspended or unresponsive pages. Headless runs remain available until explicitly stopped.
 
 The tray menu provides **Open window**, **Keep running in background**, **Diagnostics**, and **Quit**. Its background checkbox mirrors `--keep-running`. Tray failures are logged and leave the app usable. Quit stops watching, cancels operations between entries, flushes cache usage, closes backup/index workers and requests server shutdown, with a 20-second join cap. A filesystem call or decoder stuck in native code can outlast cancellation.
 

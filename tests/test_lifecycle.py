@@ -65,8 +65,37 @@ def test_keep_running_and_owned_process_exit():
     life.tick()
     assert not reasons
     life.set_keep_running(False)
+    # The close reported while keep-running was on is still pending, so it expires at once.
+    life.tick()
+    assert reasons == ["window closed (grace expired)"]
+
+
+def test_process_exit_alone_shuts_down_after_grace():
+    clock, life, reasons = controller()
     life.process_closed()
-    assert reasons == ["window closed"]
+    clock[0] = 9.9
+    life.tick()
+    assert not reasons
+    clock[0] = 10
+    life.tick()
+    assert reasons == ["browser process exited (grace expired)"]
+
+
+def test_browser_handoff_keeps_running_while_the_page_heartbeats():
+    """An already-running browser adopts the window and our launcher process exits immediately."""
+    clock, life, reasons = controller()
+    life.process_closed()
+    assert life.closed_at == 0 and not life.page_alive()
+    clock[0] = 2
+    life.heartbeat()
+    assert life.page_alive()
+    clock[0] = 60
+    life.tick()
+    assert not reasons
+    life.window_closed()
+    clock[0] = 70
+    life.tick()
+    assert reasons == ["window closed (grace expired)"]
 
 
 def test_shutdown_refuses_foreign_origin_and_fetch_site(client):
@@ -107,7 +136,40 @@ def test_window_wait_signals_exit_without_ui(tmp_path):
             return 0
     manager.process = Process()
     manager._wait(manager.process)
-    assert manager.process is None and reasons == ["window closed"]
+    assert manager.process is None and not reasons and life.closed_at is not None
+
+
+def test_fresh_lifecycle_launches_a_window_before_any_heartbeat(tmp_path, monkeypatch):
+    """At startup no page has reported in yet, so the first open must really launch the browser."""
+    clock, life, _ = controller()
+    assert not life.page_alive()
+    manager = WindowManager("http://127.0.0.1:1234/", tmp_path, "auto", life)
+    launches = []
+    import photo_explorer.launcher as launcher
+    monkeypatch.setattr(launcher, "open_window", lambda *args, **kw: launches.append(args) or None)
+    manager.open()
+    assert len(launches) == 1
+    clock[0] = 149
+    life.tick()
+    assert life.reason is None
+    clock[0] = 150
+    life.tick()
+    assert life.reason == "heartbeat timeout"
+
+
+def test_focus_reuses_a_handed_off_window_via_heartbeat(tmp_path, monkeypatch):
+    clock, life, _ = controller()
+    manager = WindowManager("http://127.0.0.1:1234/", tmp_path, "auto", life)
+    launches = []
+    import photo_explorer.launcher as launcher
+    monkeypatch.setattr(launcher, "open_window", lambda *args, **kw: launches.append(args) or None)
+    life.heartbeat()
+    clock[0] = 5
+    manager.open("#root=3")
+    assert launches == [] and manager.page_command == {"sequence": 1, "fragment": "#root=3"}
+    clock[0] = 40
+    manager.open()
+    assert len(launches) == 1
 
 
 def test_focus_reuses_handle_and_routes_diagnostics(tmp_path, monkeypatch):

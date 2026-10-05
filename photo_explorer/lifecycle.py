@@ -18,8 +18,10 @@ class Lifecycle:
         self.window_mode = window_mode
         self.keep_running = keep_running
         self.clock = clock
-        self.last_heartbeat = clock()
+        self.started = clock()
+        self.last_heartbeat: float | None = None  # None until the page has reported in once
         self.closed_at: float | None = None
+        self.closed_reason = "window closed"
         self.reason: str | None = None
         self.stopping = threading.Event()
         self.guard = threading.RLock()
@@ -32,15 +34,28 @@ class Lifecycle:
             self.last_heartbeat = self.clock()
             self.closed_at = None
 
-    def window_closed(self) -> None:
+    def window_closed(self, reason: str = "window closed") -> None:
         with self.guard:
             if self.closed_at is None:
                 self.closed_at = self.clock()
+                self.closed_reason = reason
 
     def process_closed(self) -> None:
+        """The browser process we launched has ended.
+
+        That is not proof the window is gone: a browser that is already running (or pre-launched
+        in the background) adopts the new window and the process we started exits at once. So this
+        only starts the grace period; a heartbeat from the page cancels it, silence lets it expire.
+        """
         with self.guard:
             if self.window_mode and not self.keep_running:
-                self.shutdown("window closed")
+                self.window_closed("browser process exited")
+
+    def page_alive(self, within: float = 15) -> bool:
+        """True when the page has sent a heartbeat recently, whichever process hosts it."""
+        with self.guard:
+            return (self.closed_at is None and self.last_heartbeat is not None
+                    and self.clock() - self.last_heartbeat < within)
 
     def set_keep_running(self, enabled: bool) -> None:
         with self.guard:
@@ -53,8 +68,8 @@ class Lifecycle:
                 return
             now = self.clock()
             if self.closed_at is not None and now - self.closed_at >= 10:
-                self.shutdown("window closed (grace expired)")
-            elif now - self.last_heartbeat >= 150:
+                self.shutdown(f"{self.closed_reason} (grace expired)")
+            elif now - (self.last_heartbeat if self.last_heartbeat is not None else self.started) >= 150:
                 self.shutdown("heartbeat timeout")
 
     def shutdown(self, reason: str) -> None:
