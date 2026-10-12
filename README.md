@@ -2,13 +2,17 @@
 
 An offline Windows image browser with a virtual thumbnail grid and a full-screen viewer. Choose a sort criterion and direction; every arrow step uses that exact server-ordered result, including all active filters. Nothing is uploaded, and the interface needs no network assets or build step.
 
-## Run
+## Run from source
 
-Double-click `run.bat`, or run from this folder:
+Install 64-bit Python 3.12 or later on Windows. From a fresh checkout, create a virtual environment and install the project and its runtime dependencies:
 
 ```powershell
-.\.venv\Scripts\python.exe -m photo_explorer "D:\Pictures"
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m photo_explorer
 ```
+
+The checkout does not include Python, a virtual environment, or downloaded dependencies. Initial setup needs access to the required packages; after installation, browsing local images works offline. Double-click `run.bat` for later launches, or pass a folder to `python -m photo_explorer`.
 
 The launcher binds **127.0.0.1 only**, prints its URL when a console is available, and opens an Edge app window (Chrome or the default browser is the fallback). Closing the app window stops the server. Ctrl+C and **Tools → Quit** also stop it gracefully. Source development remains available through `run.bat` and `python -m photo_explorer`.
 
@@ -20,14 +24,18 @@ python -m photo_explorer [FOLDER] [--port N] [--no-browser]
 
 `--no-browser` never auto-exits and never starts a tray icon. `--no-tray` suppresses the notification icon. `--keep-running` keeps the server available after its window closes. `--verbose` enables debug logging and HTTP access logs. `--version` prints the version and exits. The internal `--pick-folder [--title TEXT]` mode shows only the native folder picker and returns the selected path as UTF-8; cancel returns an empty line.
 
-## Install
+## Build a Windows distribution
 
-The optional Windows distribution is an unsigned, windowed **folder build**. After installing the runtime and build dependencies in the project virtual environment, build it with:
+The optional Windows distribution is an unsigned, windowed **folder build**. After the source setup above, install the build dependency, generate the smoke-test samples, and build:
 
 ```powershell
+.\.venv\Scripts\python.exe -m pip install pyinstaller
+.\.venv\Scripts\python.exe tools\make_samples.py .work\samples --count 80 --seed 7
 .\.venv\Scripts\python.exe packaging\build_exe.py
 .\.venv\Scripts\python.exe packaging\smoke_exe.py
 ```
+
+The build script requires the 64-bit Windows interpreter at `.venv\Scripts\python.exe`. See [packaging/README.md](packaging/README.md) for the full preflight and build workflow.
 
 With that interpreter activated, the build command is `python packaging/build_exe.py`. Run `dist\PhotoExplorer\PhotoExplorer.exe`, or extract the versioned `dist\PhotoExplorer-<version>-win64.zip` and run the exe inside its folder. Keep `_internal` beside the exe; copying the exe alone will not work.
 
@@ -97,6 +105,8 @@ Use **Open folder** for the native picker, **Browse…** for the in-app folder b
 
 The help overlay is generated from the definitions in `keys.js`. `1` selects actual size and `Alt+1` gives one star. Clickable stars always provide ratings 1–5.
 
+For the module boundaries and recovery limits, see [Architecture](docs/ARCHITECTURE.md).
+
 ## Ordering and filters
 
 All list and position requests use one query builder. Date sorts default to descending; other sorts default to ascending. Every order ends with natural filename ascending and image id ascending. Missing dimensions/camera sort last in both directions. Date taken falls back to modified time per image. Random stores a sequence until **Shuffle** is pressed; its API accepts a reproducible integer seed.
@@ -123,16 +133,17 @@ The global unique path index permits one owning root per file. Overlapping roots
 
 ## Samples and verification
 
-Install the runtime and test dependencies before running these commands. `requirements.txt` and `pyproject.toml` describe runtime requirements; pytest and httpx are additional test dependencies. The frontend needs no build step.
+Tests are optional. After the source setup, install `pytest` and `httpx` in the same virtual environment. The frontend uses plain JavaScript modules and needs no npm dependencies or build step.
 
 ```powershell
+.\.venv\Scripts\python.exe -m pip install pytest httpx
 $env:PHOTO_EXPLORER_HOME = "$PWD\.work\home"
 .\.venv\Scripts\python.exe tools\make_samples.py .work\samples --count 80 --seed 7
 .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
 .\.venv\Scripts\python.exe -m photo_explorer .work\samples --no-browser --no-tray --port 8765 --home .work\home
 ```
 
-Tests create private libraries and home directories under `.work/pytest`, replace Recycle Bin and native system calls, and exercise every sort direction and filter plus the ordered-navigation acceptance test. The optional Node runtime runs a navigation-module contract test without a browser or npm. A deprecation warning from the installed Starlette/httpx test integration may appear; the installed client remains usable.
+Tests create temporary libraries and home directories under `.work/pytest`, replace Recycle Bin and native system calls, and exercise every sort direction and filter plus the ordered-navigation acceptance test. If `node` is available on PATH, pytest also runs the browser-free JavaScript navigation contract in `tests/frontend_contract.mjs`; otherwise that test is skipped. No npm packages are required. Native browser, tray and real-file workflows still need a manual check.
 
 No videos, RAW decoding, editing controls, maps, cloud services or archives are included.
 

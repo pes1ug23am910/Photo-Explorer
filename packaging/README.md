@@ -1,9 +1,13 @@
 # Windows distribution maintenance
 
-Use a 64-bit Windows Python environment at `.venv` with the runtime dependencies, pytest, httpx and PyInstaller installed. The folder build uses those installed packages and does not invoke UPX or an installer compiler. Run these commands sequentially from the checkout:
+First follow the [source setup](../README.md#run-from-source) using 64-bit Python 3.12 or later on Windows. The build script requires the virtual environment at `.venv`; it is not included in the checkout. Install the build/test dependencies and generate the sample library before running the checks below. Initial dependency installation may download packages. The build itself uses installed packages and does not invoke UPX or an installer compiler.
+
+Run these commands sequentially from the checkout:
 
 ```powershell
+.\.venv\Scripts\python.exe -m pip install pyinstaller pytest httpx
 $env:PHOTO_EXPLORER_HOME = "$PWD\.work\home"
+.\.venv\Scripts\python.exe tools\make_samples.py .work\samples --count 80 --seed 7
 .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
 .\.venv\Scripts\python.exe packaging\smoke_exe.py --source
 .\.venv\Scripts\python.exe packaging\build_exe.py
